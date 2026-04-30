@@ -1,0 +1,29 @@
+[package]
+name = "handshake-py"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PyO3 Python bindings to the canonical Rust Handshake core. Built with maturin."
+publish = false
+
+[lib]
+# `name` here drives the .so filename — maturin renames it to match the
+# Python extension module path declared in pyproject.toml (`handshake._native`).
+# The #[pymodule] entry point in src/lib.rs MUST be `_native` so the
+# generated `PyInit__native` symbol matches.
+name = "handshake_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Sibling-path dep on the canonical Rust core. This is THE point of the FFI
+# architecture — a single Rust crate produces all signatures/digests, then
+# Python (here) and TypeScript (handshake-ts) re-export them. See
+# docs/decisions/0006-rust-core-authoritative.md.
+handshake = { path = "../handshake-rs" }
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
+serde_json = "1.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
