@@ -16,6 +16,7 @@ from typing import Any
 
 from . import _native  # type: ignore[attr-defined]
 from . import models
+from . import verify as _verify_mod
 
 SPEC_VERSION: str = _native.SPEC_VERSION
 __version__: str = _native.__version__
@@ -52,6 +53,10 @@ def canonicalize(value: Any) -> bytes:
     return _native.canonicalize(text)
 
 
+verify_handshake_request = _verify_mod.verify_handshake_request
+intersect_capabilities = _verify_mod.intersect_capabilities
+VerifyResult = _verify_mod.VerifyResult
+
 __all__ = [
     "SPEC_VERSION",
     "__version__",
@@ -65,4 +70,11 @@ __all__ = [
     "mldsa65_sign",
     "mldsa65_verify",
     "models",
+    "verify",
+    "verify_handshake_request",
+    "intersect_capabilities",
+    "VerifyResult",
 ]
+
+# Expose the submodule under its short name for `from handshake import verify`.
+verify = _verify_mod

@@ -10,10 +10,13 @@
 //! `handshake_py` (drives the `.so` filename); maturin assembles the wheel so
 //! `import handshake._native` resolves to the `PyInit__native` symbol below.
 
+use std::collections::HashMap;
+
+use handshake::verify::{intersect_to_json_string, verify_to_json_string};
 use handshake::{hash, jcs, mldsa, sign};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyTuple};
 
 /// JCS-canonicalize a JSON document supplied as a UTF-8 string.
 ///
@@ -144,6 +147,56 @@ fn mldsa65_verify(public_key: &[u8], signature: &[u8], message: &[u8]) -> PyResu
     }
 }
 
+/// Verify a `HandshakeRequest` (JSON string) against the Phase 2 chain-walk
+/// verifier. The `keys` dict maps DID → 32-byte raw Ed25519 public key. The
+/// returned JSON string carries either `{result:"accept", ...}` or
+/// `{result:"reject", error_code, rejected_at_step, detail, rejected_delegation_id}`.
+///
+/// This is the FFI-level API; `handshake.verify.verify_handshake_request`
+/// in Python wraps it for ergonomic dict-of-bytes / list-of-str input.
+#[pyfunction]
+#[pyo3(signature = (request_json, keys, receiver_did, now_rfc3339, revoked_principals = None, revoked_delegations = None))]
+fn verify_handshake_request_json(
+    request_json: &str,
+    keys: &Bound<'_, PyDict>,
+    receiver_did: &str,
+    now_rfc3339: &str,
+    revoked_principals: Option<Vec<String>>,
+    revoked_delegations: Option<Vec<String>>,
+) -> PyResult<String> {
+    let mut key_map: HashMap<String, [u8; 32]> = HashMap::new();
+    for (k, v) in keys.iter() {
+        let did: String = k.extract()?;
+        let bytes: Vec<u8> = v.extract()?;
+        let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
+            PyValueError::new_err(format!(
+                "key for DID {did}: expected 32-byte Ed25519 public key, got {} bytes",
+                bytes.len()
+            ))
+        })?;
+        key_map.insert(did, arr);
+    }
+    let revoked_principals = revoked_principals.unwrap_or_default();
+    let revoked_delegations = revoked_delegations.unwrap_or_default();
+    verify_to_json_string(
+        request_json,
+        &key_map,
+        receiver_did,
+        now_rfc3339,
+        &revoked_principals,
+        &revoked_delegations,
+    )
+    .map_err(|e| PyValueError::new_err(format!("verify failed: {e}")))
+}
+
+/// Intersect two capability constraint sets supplied as JSON object strings.
+/// Returns a JSON string per the Rust core's `intersect_to_json_string`.
+#[pyfunction]
+fn intersect_capabilities_json(delegated_json: &str, requested_json: &str) -> PyResult<String> {
+    intersect_to_json_string(delegated_json, requested_json)
+        .map_err(|e| PyValueError::new_err(format!("intersect failed: {e}")))
+}
+
 /// PyO3 module entry point. Module name MUST be `_native` so the generated
 /// `PyInit__native` symbol matches the Python import path
 /// `handshake._native` declared in `pyproject.toml`.
@@ -160,5 +213,7 @@ fn _native(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mldsa65_keypair_from_seed, m)?)?;
     m.add_function(wrap_pyfunction!(mldsa65_sign, m)?)?;
     m.add_function(wrap_pyfunction!(mldsa65_verify, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_handshake_request_json, m)?)?;
+    m.add_function(wrap_pyfunction!(intersect_capabilities_json, m)?)?;
     Ok(())
 }
