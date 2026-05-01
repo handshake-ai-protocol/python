@@ -50,12 +50,23 @@ def canonicalize(value: Any) -> bytes:
     # JCS layer reparses anyway, so this is purely about predictable input
     # length on the FFI hop.
     text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    return _native.canonicalize(text)
+    out: bytes = _native.canonicalize(text)
+    return out
 
 
 verify_handshake_request = _verify_mod.verify_handshake_request
 intersect_capabilities = _verify_mod.intersect_capabilities
 VerifyResult = _verify_mod.VerifyResult
+
+# Phase 4 — high-level producer API + KMS abstraction. Imported lazily-named
+# (after canonicalize is defined) because client.py imports `canonicalize`
+# from this module at import time.
+from . import kms  # noqa: E402
+from . import client as _client_mod  # noqa: E402
+
+Handshake = _client_mod.Handshake
+HandshakeContext = _client_mod.HandshakeContext
+RegistryError = _client_mod.RegistryError
 
 __all__ = [
     "SPEC_VERSION",
@@ -74,7 +85,14 @@ __all__ = [
     "verify_handshake_request",
     "intersect_capabilities",
     "VerifyResult",
+    # Phase 4 producer surface
+    "Handshake",
+    "HandshakeContext",
+    "RegistryError",
+    "kms",
+    "client",
 ]
 
-# Expose the submodule under its short name for `from handshake import verify`.
+# Expose submodules under their short names for ergonomic imports.
 verify = _verify_mod
+client = _client_mod

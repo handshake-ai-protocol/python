@@ -110,7 +110,8 @@ def intersect_capabilities(
         json.dumps(delegated, ensure_ascii=False, separators=(",", ":")),
         json.dumps(requested, ensure_ascii=False, separators=(",", ":")),
     )
-    return json.loads(payload)
+    parsed: dict[str, Any] = json.loads(payload)
+    return parsed
 
 
 __all__ = ["VerifyResult", "verify_handshake_request", "intersect_capabilities"]
