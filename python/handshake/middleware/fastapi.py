@@ -5,7 +5,7 @@ every request to a FastAPI service. Designed for the *server side* of a
 handshake: the agent calling the service signs an envelope, we verify it,
 the handler runs, and we record a receipt of the work.
 
-Usage::
+Usage (single-instance / development — in-memory nonce store)::
 
     from fastapi import FastAPI
     from handshake import Handshake
@@ -18,12 +18,32 @@ Usage::
         handshake=hs,
         keys={"did:hsk:caller-1": caller_pubkey_bytes},
         receiver_did="did:hsk:my-service",
+        allow_in_memory_nonces=True,   # single-instance only
+    )
+
+Usage (multi-instance / production — distributed nonce store required)::
+
+    from handshake.middleware.fastapi import FastAPIHandshakeMiddleware, RedisNonceStore
+
+    app.add_middleware(
+        FastAPIHandshakeMiddleware,
+        handshake=hs,
+        keys={"did:hsk:caller-1": caller_pubkey_bytes},
+        receiver_did="did:hsk:my-service",
+        nonce_store=RedisNonceStore(redis_client),
     )
 
 The middleware mounts `request.state.handshake` containing the verified
 request envelope and the `effective_constraints`. Handlers should use
 `request.state.handshake.context` to record receipts that link to the
 inbound handshake_id.
+
+SECURITY: ``nonce_store`` or ``allow_in_memory_nonces=True`` must be
+supplied explicitly. Omitting both is treated as a server misconfiguration
+and every request is rejected with HTTP 500. This is fail-closed by design:
+the process-local nonce store is only safe for single-instance deployments,
+so silently defaulting to it in a multi-instance deployment would leave a
+cross-pod replay window open.
 """
 
 from __future__ import annotations
@@ -128,11 +148,16 @@ class FastAPIHandshakeMiddleware:
         explicit dict.
       receiver_did: the DID of THIS service. Verifier rejects envelopes whose
         `aud` doesn't match.
-      nonce_store: optional injectable nonce store for cross-instance replay
-        protection.  When not supplied the middleware relies solely on the
-        process-local nonce tracking built into the Rust verifier core, which
-        is *not* safe in multi-instance deployments.  Supply a shared backend
-        (Redis, Postgres, …) to get cross-pod replay rejection.
+      nonce_store: injectable nonce store for cross-instance replay
+        protection.  For multi-instance deployments this **must** be backed
+        by a shared store (Redis, Postgres, …) so a nonce consumed on one
+        pod is rejected on all others within the freshness window.
+      allow_in_memory_nonces: when ``True`` and ``nonce_store`` is ``None``,
+        the middleware falls back to a process-local ``InMemoryNonceStore``.
+        This is only safe for single-instance services or local development.
+        Leaving both ``nonce_store`` and ``allow_in_memory_nonces`` unset is
+        a server misconfiguration and every request will be rejected with
+        HTTP 500.
     """
 
     def __init__(
@@ -144,17 +169,39 @@ class FastAPIHandshakeMiddleware:
         receiver_did: str,
         require: bool = True,
         nonce_store: Optional[NonceStore] = None,
+        allow_in_memory_nonces: bool = False,
     ) -> None:
         self.app = app
         self.handshake = handshake
         self.keys = dict(keys)
         self.receiver_did = receiver_did
         self.require = require
-        self.nonce_store = nonce_store
+
+        if nonce_store is not None:
+            self.nonce_store: NonceStore = nonce_store
+            self._nonce_misconfigured = False
+        elif allow_in_memory_nonces:
+            self.nonce_store = InMemoryNonceStore()
+            self._nonce_misconfigured = False
+        else:
+            self._nonce_misconfigured = True
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
+            return
+
+        # Fail-closed: require callers to be explicit about replay protection.
+        if self._nonce_misconfigured:
+            await self._reject(send, 500, {
+                "code": "handshake_misconfigured",
+                "message": (
+                    "handshake middleware misconfigured: nonce_store is required; "
+                    "supply a distributed NonceStore or set allow_in_memory_nonces=True "
+                    "to opt into process-local replay protection "
+                    "(not safe for multi-instance deployments)"
+                ),
+            })
             return
 
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
@@ -185,15 +232,14 @@ class FastAPIHandshakeMiddleware:
             })
             return
 
-        # Cross-instance replay check using the injectable nonce store.
-        if self.nonce_store is not None:
-            nonce = req.get("nonce")
-            if nonce and self.nonce_store.check_and_record(str(nonce)):
-                await self._reject(send, 403, {
-                    "code": "replay_detected",
-                    "message": "nonce already consumed (replay)",
-                })
-                return
+        # Cross-instance replay check — always performed via the nonce store.
+        nonce = req.get("nonce")
+        if nonce and self.nonce_store.check_and_record(str(nonce)):
+            await self._reject(send, 403, {
+                "code": "replay_detected",
+                "message": "nonce already consumed (replay)",
+            })
+            return
 
         # Build a HandshakeContext under the SERVICE's identity so handler
         # code can emit a receipt that's signed by the service (the work-doer).

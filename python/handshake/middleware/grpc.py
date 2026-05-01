@@ -4,7 +4,7 @@ Mirrors the FastAPI middleware but for gRPC: pulls the HandshakeRequest
 off `metadata`, verifies it, mounts a `HandshakeContext` on the
 `ServicerContext` via a custom attribute, then dispatches.
 
-Usage::
+Usage (single-instance / development — in-memory nonce store)::
 
     import grpc
     from handshake import Handshake
@@ -14,12 +14,32 @@ Usage::
         handshake=Handshake(...),
         keys={"did:hsk:caller-1": pubkey_bytes},
         receiver_did="did:hsk:my-grpc-service",
+        allow_in_memory_nonces=True,   # single-instance only
     )
     server = grpc.server(thread_pool, interceptors=[interceptor])
+
+Usage (multi-instance / production — distributed nonce store required)::
+
+    interceptor = gRPCHandshakeInterceptor(
+        handshake=Handshake(...),
+        keys={"did:hsk:caller-1": pubkey_bytes},
+        receiver_did="did:hsk:my-grpc-service",
+        nonce_store=RedisNonceStore(redis_client),
+    )
 
 This module declines a hard `grpc` dependency at import time — it imports
 the package lazily and exposes a no-op fallback so unit tests can probe
 the verifier path without grpcio installed.
+
+SECURITY: ``nonce_store`` or ``allow_in_memory_nonces=True`` must be
+supplied explicitly. Omitting both is treated as a server misconfiguration.
+When ``require=True`` (the default) every RPC is rejected with
+``UNAUTHENTICATED``; when ``require=False`` unauthenticated RPCs are passed
+through even on misconfiguration (this matches the existing ``require``
+semantics for missing headers). This is fail-closed by design for the default
+configuration: the process-local nonce store is only safe for single-instance
+deployments, so silently defaulting to it in a multi-instance deployment
+would leave a cross-pod replay window open.
 """
 
 from __future__ import annotations
@@ -169,12 +189,18 @@ class gRPCHandshakeInterceptor:
         require: when ``False``, RPCs that carry no or invalid metadata
             are passed through instead of rejected (useful for mixed
             public/private services).
-        nonce_store: optional injectable nonce store for cross-instance
-            replay protection.  When not supplied the interceptor relies
-            solely on the process-local nonce tracking built into the
-            Rust verifier core, which is *not* safe in multi-instance
-            deployments.  Supply a shared backend (Redis, Postgres, …)
-            to get cross-pod replay rejection.
+        nonce_store: injectable nonce store for cross-instance replay
+            protection.  For multi-instance deployments this **must** be
+            backed by a shared store (Redis, Postgres, …) so a nonce
+            consumed on one pod is rejected on all others within the
+            freshness window.
+        allow_in_memory_nonces: when ``True`` and ``nonce_store`` is
+            ``None``, the interceptor falls back to a process-local
+            ``InMemoryNonceStore``.  This is only safe for single-instance
+            services or local development.  Leaving both ``nonce_store``
+            and ``allow_in_memory_nonces`` unset is a server
+            misconfiguration; with ``require=True`` (default) every RPC
+            is rejected with ``UNAUTHENTICATED``.
     """
 
     def __init__(
@@ -185,12 +211,22 @@ class gRPCHandshakeInterceptor:
         receiver_did: str,
         require: bool = True,
         nonce_store: Optional[NonceStore] = None,
+        allow_in_memory_nonces: bool = False,
     ) -> None:
         self.handshake = handshake
         self.keys = dict(keys)
         self.receiver_did = receiver_did
         self.require = require
-        self.nonce_store = nonce_store
+
+        if nonce_store is not None:
+            self.nonce_store: Optional[NonceStore] = nonce_store
+            self._nonce_misconfigured = False
+        elif allow_in_memory_nonces:
+            self.nonce_store = InMemoryNonceStore()
+            self._nonce_misconfigured = False
+        else:
+            self.nonce_store = None
+            self._nonce_misconfigured = True
 
     def _make_verify_fn(self) -> Callable[[Any], tuple[bool, Any]]:
         """Return a callable that verifies metadata and returns (ok, state|err)."""
@@ -198,17 +234,27 @@ class gRPCHandshakeInterceptor:
         receiver_did = self.receiver_did
         handshake = self.handshake
         nonce_store = self.nonce_store
+        nonce_misconfigured = self._nonce_misconfigured
 
         def _verify(context: Any) -> tuple[bool, Any]:
+            if nonce_misconfigured:
+                return False, {
+                    "code": "handshake_misconfigured",
+                    "message": (
+                        "handshake middleware misconfigured: nonce_store is required; "
+                        "supply a distributed NonceStore or set allow_in_memory_nonces=True "
+                        "to opt into process-local replay protection "
+                        "(not safe for multi-instance deployments)"
+                    ),
+                }
             md = dict(context.invocation_metadata()) if hasattr(context, "invocation_metadata") else {}
             ok, payload = verify_metadata(md, keys=keys, receiver_did=receiver_did, handshake=handshake)
             if not ok:
                 return False, payload
-            if nonce_store is not None:
-                req = payload.request  # type: ignore[union-attr]
-                nonce = req.get("nonce")
-                if nonce and nonce_store.check_and_record(str(nonce)):
-                    return False, {"code": "replay_detected", "message": "nonce already consumed (replay)"}
+            req = payload.request  # type: ignore[union-attr]
+            nonce = req.get("nonce")
+            if nonce and nonce_store.check_and_record(str(nonce)):
+                return False, {"code": "replay_detected", "message": "nonce already consumed (replay)"}
             return True, payload
 
         return _verify
