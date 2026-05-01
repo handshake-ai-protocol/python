@@ -48,6 +48,7 @@ cross-pod replay window open.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from base64 import urlsafe_b64decode
 from dataclasses import dataclass, field
@@ -233,13 +234,34 @@ class FastAPIHandshakeMiddleware:
             return
 
         # Cross-instance replay check — always performed via the nonce store.
+        # ROUND-9 AUDIT: NonceStore.check_and_record is a synchronous call
+        # by Protocol contract (see line 83). Cross-instance implementations
+        # (PostgresNonceStore, RedisNonceStore, …) do real network I/O on
+        # this call, so invoking it directly from this `async def __call__`
+        # would block the entire asyncio event loop for the duration of
+        # the DB roundtrip on EVERY request — typically tens of ms, and
+        # potentially the full pool-exhaustion timeout (default 30s) under
+        # load. That collapses throughput to "1 request per DB roundtrip"
+        # and starves all other coroutines on the worker (health checks,
+        # SSE keepalives, …).
+        #
+        # asyncio.to_thread runs the sync call in the default thread pool
+        # so the event loop stays responsive. The cost for cheap stores
+        # (InMemoryNonceStore) is ~10us of executor dispatch — negligible.
+        # All NonceStore implementations are required to be thread-safe by
+        # the Protocol docstring above ("must be thread-safe / coroutine-safe
+        # as appropriate"), so worker-thread dispatch is always safe.
         nonce = req.get("nonce")
-        if nonce and self.nonce_store.check_and_record(str(nonce)):
-            await self._reject(send, 403, {
-                "code": "replay_detected",
-                "message": "nonce already consumed (replay)",
-            })
-            return
+        if nonce:
+            is_replay = await asyncio.to_thread(
+                self.nonce_store.check_and_record, str(nonce)
+            )
+            if is_replay:
+                await self._reject(send, 403, {
+                    "code": "replay_detected",
+                    "message": "nonce already consumed (replay)",
+                })
+                return
 
         # Build a HandshakeContext under the SERVICE's identity so handler
         # code can emit a receipt that's signed by the service (the work-doer).
