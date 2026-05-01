@@ -32,7 +32,7 @@ import json
 from base64 import urlsafe_b64decode
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Protocol, runtime_checkable
 
 from ..client import Handshake, HandshakeContext
 from ..models import Capability
@@ -43,6 +43,55 @@ def _utcnow_iso() -> str:
     return datetime.now(tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 REQUEST_HEADER = "x-handshake-request"
+
+
+@runtime_checkable
+class NonceStore(Protocol):
+    """Injectable nonce store for cross-instance replay protection.
+
+    Production deployments should back this with a shared store (Redis,
+    Postgres, etc.) so that a nonce consumed by one pod/worker/process
+    is rejected by all others within the freshness window.
+
+    The built-in in-process store used by the Rust verifier core is only
+    safe for single-instance deployments.
+
+    ``check_and_record`` must be thread-safe / coroutine-safe as
+    appropriate for the deployment's concurrency model.
+    """
+
+    def check_and_record(self, nonce: str) -> bool:
+        """Return ``True`` if *nonce* was already seen (replay), else record it."""
+        ...
+
+
+class InMemoryNonceStore:
+    """Default in-process nonce store (process-local, not suitable for multi-instance).
+
+    **Limitations:**
+
+    * **Memory growth:** nonces are stored indefinitely in a ``set`` for the
+      lifetime of the process.  Under sustained traffic this will grow without
+      bound.  For long-lived services use a TTL-aware backend (e.g. Redis
+      ``SET EX``) or implement eviction in a custom ``NonceStore``.
+    * **Single process only:** each instance keeps an independent store, so a
+      nonce consumed on one pod/worker is not known to others.  Cross-instance
+      replay protection requires a shared backend.
+
+    Use only for single-instance services, short-lived processes, or tests.
+    """
+
+    def __init__(self) -> None:
+        import threading
+        self._lock = threading.Lock()
+        self._seen: set[str] = set()
+
+    def check_and_record(self, nonce: str) -> bool:
+        with self._lock:
+            if nonce in self._seen:
+                return True
+            self._seen.add(nonce)
+            return False
 
 
 @dataclass
@@ -79,6 +128,11 @@ class FastAPIHandshakeMiddleware:
         explicit dict.
       receiver_did: the DID of THIS service. Verifier rejects envelopes whose
         `aud` doesn't match.
+      nonce_store: optional injectable nonce store for cross-instance replay
+        protection.  When not supplied the middleware relies solely on the
+        process-local nonce tracking built into the Rust verifier core, which
+        is *not* safe in multi-instance deployments.  Supply a shared backend
+        (Redis, Postgres, …) to get cross-pod replay rejection.
     """
 
     def __init__(
@@ -89,12 +143,14 @@ class FastAPIHandshakeMiddleware:
         keys: Mapping[str, bytes],
         receiver_did: str,
         require: bool = True,
+        nonce_store: Optional[NonceStore] = None,
     ) -> None:
         self.app = app
         self.handshake = handshake
         self.keys = dict(keys)
         self.receiver_did = receiver_did
         self.require = require
+        self.nonce_store = nonce_store
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
@@ -128,6 +184,16 @@ class FastAPIHandshakeMiddleware:
                 "message": result.detail or "handshake verification failed",
             })
             return
+
+        # Cross-instance replay check using the injectable nonce store.
+        if self.nonce_store is not None:
+            nonce = req.get("nonce")
+            if nonce and self.nonce_store.check_and_record(str(nonce)):
+                await self._reject(send, 403, {
+                    "code": "replay_detected",
+                    "message": "nonce already consumed (replay)",
+                })
+                return
 
         # Build a HandshakeContext under the SERVICE's identity so handler
         # code can emit a receipt that's signed by the service (the work-doer).
@@ -164,4 +230,10 @@ class FastAPIHandshakeMiddleware:
         await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
-__all__ = ["FastAPIHandshakeMiddleware", "HandshakeRequestState", "REQUEST_HEADER"]
+__all__ = [
+    "FastAPIHandshakeMiddleware",
+    "HandshakeRequestState",
+    "InMemoryNonceStore",
+    "NonceStore",
+    "REQUEST_HEADER",
+]
