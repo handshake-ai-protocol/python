@@ -201,7 +201,7 @@ fn intersect_capabilities_json(delegated_json: &str, requested_json: &str) -> Py
 /// `PyInit__native` symbol matches the Python import path
 /// `handshake._native` declared in `pyproject.toml`.
 #[pymodule]
-fn _native(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("SPEC_VERSION", handshake::SPEC_VERSION)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(canonicalize, m)?)?;
