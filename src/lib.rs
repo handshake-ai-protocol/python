@@ -30,13 +30,13 @@ fn canonicalize(py: Python<'_>, text: &str) -> PyResult<Py<PyBytes>> {
         .map_err(|e| PyValueError::new_err(format!("invalid JSON: {e}")))?;
     let bytes = jcs::canonicalize(&value)
         .map_err(|e| PyValueError::new_err(format!("canonicalize: {e}")))?;
-    Ok(PyBytes::new_bound(py, &bytes).into())
+    Ok(PyBytes::new(py, &bytes).into())
 }
 
 /// Raw 32-byte SHA-256 digest of `data`.
 #[pyfunction]
 fn sha256(py: Python<'_>, data: &[u8]) -> Py<PyBytes> {
-    PyBytes::new_bound(py, &hash::sha256(data)).into()
+    PyBytes::new(py, &hash::sha256(data)).into()
 }
 
 /// Lowercase-hex SHA-256 digest of `data`.
@@ -60,10 +60,10 @@ fn ed25519_keypair_from_seed(py: Python<'_>, seed: &[u8]) -> PyResult<Py<PyTuple
     let seed = seed_array(seed)?;
     let kp = sign::Keypair::from_seed(&seed);
     let elements = [
-        PyBytes::new_bound(py, &kp.seed()).into_any(),
-        PyBytes::new_bound(py, &kp.public_key()).into_any(),
+        PyBytes::new(py, &kp.seed()).into_any(),
+        PyBytes::new(py, &kp.public_key()).into_any(),
     ];
-    Ok(PyTuple::new_bound(py, elements).into())
+    Ok(PyTuple::new(py, elements)?.into())
 }
 
 /// Ed25519 sign — returns the raw 64-byte signature.
@@ -71,7 +71,7 @@ fn ed25519_keypair_from_seed(py: Python<'_>, seed: &[u8]) -> PyResult<Py<PyTuple
 fn ed25519_sign(py: Python<'_>, seed: &[u8], message: &[u8]) -> PyResult<Py<PyBytes>> {
     let seed = seed_array(seed)?;
     let kp = sign::Keypair::from_seed(&seed);
-    Ok(PyBytes::new_bound(py, &kp.sign(message)).into())
+    Ok(PyBytes::new(py, &kp.sign(message)).into())
 }
 
 /// Ed25519 verify. Returns `True` on a valid signature, `False` otherwise.
@@ -103,10 +103,10 @@ fn mldsa65_keypair_from_seed(py: Python<'_>, seed: &[u8]) -> PyResult<Py<PyTuple
     let seed = seed_array(seed)?;
     let kp = mldsa::Keypair::from_seed(&seed);
     let elements = [
-        PyBytes::new_bound(py, &kp.private_key()).into_any(),
-        PyBytes::new_bound(py, &kp.public_key()).into_any(),
+        PyBytes::new(py, &kp.private_key()).into_any(),
+        PyBytes::new(py, &kp.public_key()).into_any(),
     ];
-    Ok(PyTuple::new_bound(py, elements).into())
+    Ok(PyTuple::new(py, elements)?.into())
 }
 
 /// ML-DSA-65 deterministic sign — returns the raw 3309-byte signature.
@@ -119,7 +119,7 @@ fn mldsa65_keypair_from_seed(py: Python<'_>, seed: &[u8]) -> PyResult<Py<PyTuple
 fn mldsa65_sign(py: Python<'_>, seed: &[u8], message: &[u8]) -> PyResult<Py<PyBytes>> {
     let seed = seed_array(seed)?;
     let kp = mldsa::Keypair::from_seed(&seed);
-    Ok(PyBytes::new_bound(py, &kp.sign(message)).into())
+    Ok(PyBytes::new(py, &kp.sign(message)).into())
 }
 
 /// ML-DSA-65 verify. Returns `True` on a valid signature, `False` otherwise.
