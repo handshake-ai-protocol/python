@@ -1,6 +1,6 @@
 [package]
 name = "handshake-py"
-version = "0.1.0"
+version = "0.2.4"
 edition = "2021"
 license = "Apache-2.0"
 description = "PyO3 Python bindings to the canonical Rust Handshake core. Built with maturin."

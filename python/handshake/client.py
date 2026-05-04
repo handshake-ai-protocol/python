@@ -67,7 +67,7 @@ from .models import (
 # Spec version pinned by handshake-py; matches Phase-3 Registry's accepted
 # `version` field on every envelope. Bumping this MUST be coordinated with the
 # canonical Rust core and the Registry's pydantic model.
-SPEC_VERSION = "0.2.3"
+SPEC_VERSION = "0.2.4"
 
 # Crockford base32 alphabet for ULID-style ids. Matches the regex enforced by
 # the spec models in `models.py` (`^(rc|hs|dt)_[0-9A-HJKMNP-TV-Z]{26}$`).

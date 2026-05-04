@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "handshake"
-version = "0.1.0"
+version = "0.2.4"
 description = "Handshake protocol — Python SDK. Thin PyO3 wrapper over the canonical Rust core (packages/handshake-rs)."
 readme = "README.md"
 license = { text = "Apache-2.0" }
