@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """MCP (Model Context Protocol) handshake adapter.
 
 MCP carries arbitrary metadata on each tool invocation. The Handshake wire

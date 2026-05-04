@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Signing-key management — `KeyManagementProvider` Protocol + backends.
 
 Phase 4 introduces a signing-key abstraction that mirrors the

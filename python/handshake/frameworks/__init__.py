@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Framework wrappers — drop-in `wrap(client)` for popular agent frameworks.
 
 Each submodule exposes a single `wrap()` function that takes an existing

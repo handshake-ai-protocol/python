@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """gRPC server interceptor — `gRPCHandshakeInterceptor`.
 
 Mirrors the FastAPI middleware but for gRPC: pulls the HandshakeRequest

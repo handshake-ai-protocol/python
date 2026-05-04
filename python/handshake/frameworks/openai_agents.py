@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """OpenAI Agents SDK wrapper.
 
 Drop-in usage::

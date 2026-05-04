@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """High-level Handshake client — `Handshake`, `HandshakeContext`.
 
 This is the surface most application code touches. A producer constructs ONE

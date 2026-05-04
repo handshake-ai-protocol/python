@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """A2A (Agent-to-Agent) handshake adapter.
 
 A2A wraps each agent message in an envelope with `headers`. The Handshake

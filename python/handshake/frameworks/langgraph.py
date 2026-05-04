@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """LangGraph wrapper — `wrap_node()` for graph-bound agent steps.
 
 LangGraph nodes are pure functions `(state) → state_patch`. Production

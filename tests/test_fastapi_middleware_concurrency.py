@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """ROUND-9 audit regression tests for `FastAPIHandshakeMiddleware`.
 
 The Phase-10 follow-up T003 added a Postgres-backed `NonceStore` for

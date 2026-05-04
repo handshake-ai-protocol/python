@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PostgreSQL-backed `NonceStore` (Phase 10 follow-up #10).
 
 Implements the :class:`handshake.middleware.grpc.NonceStore` Protocol

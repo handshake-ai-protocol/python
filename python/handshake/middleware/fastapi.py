@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """FastAPI middleware — `FastAPIHandshakeMiddleware`.
 
 Mounts inbound HandshakeRequest verification + outbound Receipt emission on

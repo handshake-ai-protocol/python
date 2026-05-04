@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Anthropic SDK wrapper — `Handshake.wrap(client)` for `anthropic.Anthropic`.
 
 Drop-in usage::

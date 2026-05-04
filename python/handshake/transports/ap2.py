@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """AP2 (Agent Payments Protocol) handshake adapter.
 
 AP2 carries payment-mandate envelopes on each call. The Handshake binding:

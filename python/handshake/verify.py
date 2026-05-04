@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Phase 2 chain-walk verifier — Python facade.
 
 Wraps the FFI surface (`_native.verify_handshake_request_json` /

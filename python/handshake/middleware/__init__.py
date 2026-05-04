@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Server-side middleware — verify inbound HandshakeRequest, emit Receipt.
 
 A protected service (the consumer of a capability) needs to:

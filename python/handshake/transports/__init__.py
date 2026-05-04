@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Transport adapters — bind Handshake envelopes to wire protocols.
 
 Each submodule exposes `attach(transport_obj, handshake)` (or equivalent)

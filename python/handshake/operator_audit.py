@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Operator audit-trail interface (Phase 6 hook).
 
 The Console (Phase 6) lets a human operator perform sensitive actions

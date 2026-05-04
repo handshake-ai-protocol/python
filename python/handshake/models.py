@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Pydantic v2 models mirroring the v0.2.3 JSON Schemas.
 
 Each model carries enough validation metadata that round-tripping a payload

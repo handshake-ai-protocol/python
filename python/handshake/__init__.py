@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Handshake protocol — Python SDK.
 
 Thin wrapper over the canonical Rust core (`packages/handshake-rs`) via PyO3.
