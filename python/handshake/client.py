@@ -67,7 +67,7 @@ from .models import (
 # Spec version pinned by handshake-py; matches Phase-3 Registry's accepted
 # `version` field on every envelope. Bumping this MUST be coordinated with the
 # canonical Rust core and the Registry's pydantic model.
-SPEC_VERSION = "0.2.4"
+SPEC_VERSION = "0.2.3"
 
 # Crockford base32 alphabet for ULID-style ids. Matches the regex enforced by
 # the spec models in `models.py` (`^(rc|hs|dt)_[0-9A-HJKMNP-TV-Z]{26}$`).
@@ -132,9 +132,11 @@ def _http_post_json(
 
 
 def _http_get_json(
-    url: str, *, timeout_s: float = 10.0
+    url: str, *, timeout_s: float = 10.0, bearer: Optional[str] = None
 ) -> tuple[int, dict[str, Any]]:
     req = Request(url, method="GET")
+    if bearer:
+        req.add_header("authorization", f"Bearer {bearer}")
     try:
         with urlopen(req, timeout=timeout_s) as resp:
             return resp.status, json.loads(resp.read() or b"{}")
@@ -205,11 +207,18 @@ class Handshake:
         kms: KeyManagementProvider,
         registry_timeout_s: float = 10.0,
         offline: bool = False,
+        admin_token: Optional[str] = None,
     ) -> None:
         self.registry_url = registry_url.rstrip("/")
         self.kms = kms
         self.registry_timeout_s = registry_timeout_s
         self.offline = offline
+        # Bearer token for receipt-read endpoints (locked down by commit
+        # 12cb4f0 "close unauthenticated receipt reads"). Required when
+        # calling fetch_receipt / wait_for_anchor against a Registry that
+        # enforces auth on GET /v1/receipts/{id}; harmless when omitted
+        # against a Registry with anonymous reads enabled.
+        self.admin_token = admin_token
 
     # ---- Phase 1 — DELEGATION ------------------------------------------------
     def delegate(
@@ -368,6 +377,7 @@ class Handshake:
         code, body = _http_get_json(
             f"{self.registry_url}/v1/receipts/{receipt_id}",
             timeout_s=self.registry_timeout_s,
+            bearer=self.admin_token,
         )
         if code != 200:
             raise RegistryError(f"GET {receipt_id} failed: HTTP {code} {body!r}")
