@@ -7,8 +7,8 @@ client. The adapters are intentionally narrow — the heavy lifting lives in
 `handshake.client.Handshake`; the transport code only translates header
 formats.
 
-For a deep dive on the wire formats, see the handoff document
-(`attached_assets/Replit_Build_Handoff_*.md`) §5.
+See the Handshake protocol specification for the canonical wire-format
+definitions of the ``X-Handshake-*`` headers consumed by each adapter.
 """
 
 from . import a2a, ap2, mcp
