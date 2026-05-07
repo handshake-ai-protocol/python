@@ -19,7 +19,7 @@ crate-type = ["cdylib"]
 # architecture — a single Rust crate produces all signatures/digests, then
 # Python (here) and TypeScript (handshake-ts) re-export them. See
 # docs/decisions/0006-rust-core-authoritative.md.
-handshake = { path = "../handshake-rs" }
+handshake = { git = "https://github.com/handshake-ai-protocol/rust", tag = "v0.2.3" }
 pyo3 = { version = "0.24", features = ["extension-module", "abi3-py39"] }
 serde_json = "1.0"
 
