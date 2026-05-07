@@ -30,7 +30,7 @@ from __future__ import annotations
 import os
 from typing import Any, Optional
 
-from ..client import Handshake, HandshakeContext
+from ..client import Handshake
 from ..models import Capability
 
 

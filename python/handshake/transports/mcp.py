@@ -22,7 +22,7 @@ import json
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from typing import Any, Optional
 
-from ..client import Handshake, HandshakeContext
+from ..client import HandshakeContext
 
 
 def encode_request(ctx: HandshakeContext) -> str:

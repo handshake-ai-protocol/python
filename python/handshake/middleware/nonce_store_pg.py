@@ -74,14 +74,13 @@ import random
 import re
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    # psycopg is an optional runtime dep — we don't want to force it on
-    # users who never construct a PostgresNonceStore. The TYPE_CHECKING
-    # block lets mypy/IDE see the types without making it an import-time
-    # requirement.
-    import psycopg
+    # psycopg_pool is an optional runtime dep — we don't want to force it
+    # on users who never construct a PostgresNonceStore. The TYPE_CHECKING
+    # block lets mypy/IDE see ConnectionPool without making it an
+    # import-time requirement.
     from psycopg_pool import ConnectionPool
 
 

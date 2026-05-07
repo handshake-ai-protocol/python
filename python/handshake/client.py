@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import secrets
 import time
 from base64 import urlsafe_b64decode, urlsafe_b64encode
@@ -52,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from . import canonicalize
-from .kms import KeyManagementProvider, KmsError
+from .kms import KeyManagementProvider
 from .models import (
     Capability,
     DelegationToken,
